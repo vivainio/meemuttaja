@@ -36,6 +36,7 @@ BEGIN
             VALUE "FileDescription", "Meemuttaja meme generator\0"
             VALUE "FileVersion", "{version}\0"
             VALUE "InternalName", "meemuttaja\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Ville Vainio\0"
             VALUE "OriginalFilename", "meemuttaja.exe\0"
             VALUE "ProductName", "Meemuttaja\0"
             VALUE "ProductVersion", "{version}\0"

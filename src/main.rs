@@ -1,6 +1,12 @@
+#![cfg_attr(
+    all(target_os = "windows", not(debug_assertions)),
+    windows_subsystem = "windows"
+)]
+
 use ab_glyph::{Font, FontArc, PxScale, ScaleFont};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::theme::{Theme, ThemeMode};
+use gpui_kit::component::Sizable;
 use gpui_kit::{prelude::*, *};
 use image::{DynamicImage, Rgba};
 use imageproc::drawing::draw_text_mut;
@@ -855,8 +861,8 @@ fn button(
 ) -> Stateful<Div> {
     div()
         .id(id)
-        .px_4()
-        .py_3()
+        .px_3()
+        .py_2()
         .rounded_lg()
         .cursor_pointer()
         .text_sm()
@@ -880,8 +886,8 @@ impl Render for MemeApp {
                     .id(("caption", id))
                     .flex()
                     .flex_col()
-                    .gap_2()
-                    .p_2()
+                    .gap_1()
+                    .p_1()
                     .rounded_lg()
                     .border_1()
                     .border_color(if self.selected == Some(Selection::Caption(id)) {
@@ -909,7 +915,7 @@ impl Render for MemeApp {
                                 }
                             )),
                     )
-                    .child(Input::new(&caption.input))
+                    .child(Input::new(&caption.input).small())
             })
             .collect::<Vec<_>>();
         let selection_size = match self.selected {
@@ -1249,12 +1255,12 @@ impl Render for MemeApp {
                             .flex_shrink_0()
                             .overflow_y_scroll()
                             .h_full()
-                            .p_6()
+                            .p_4()
                             .border_r_1()
                             .border_color(rgb(0x30343d))
                             .flex()
                             .flex_col()
-                            .gap_3()
+                            .gap_2()
                             .child(
                                 div()
                                     .text_xs()
@@ -1313,12 +1319,6 @@ impl Render for MemeApp {
                             )
                             .child(
                                 div()
-                                    .text_xs()
-                                    .text_color(rgb(0x858c99))
-                                    .child("Select a layer to edit it; drag it on the image."),
-                            )
-                            .child(
-                                div()
                                     .flex()
                                     .gap_2()
                                     .child(
@@ -1353,7 +1353,53 @@ impl Render for MemeApp {
                             )
                             .child(
                                 div()
+                                    .flex()
+                                    .items_center()
+                                    .justify_between()
+                                    .gap_2()
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .gap_2()
+                                            .text_sm()
+                                            .child("Size")
+                                            .child(button(
+                                                "smaller",
+                                                "−",
+                                                false,
+                                                cx.listener(|this, _, _, cx| {
+                                                    this.resize_selection(-1.);
+                                                    this.refresh(cx);
+                                                }),
+                                            ))
+                                            .child(selection_size.unwrap_or_else(|| "—".into()))
+                                            .child(button(
+                                                "larger",
+                                                "+",
+                                                false,
+                                                cx.listener(|this, _, _, cx| {
+                                                    this.resize_selection(1.);
+                                                    this.refresh(cx);
+                                                }),
+                                            )),
+                                    )
+                                    .child(button(
+                                        "delete-selected",
+                                        "Delete",
+                                        false,
+                                        cx.listener(|this, _, _, cx| {
+                                            this.delete_selection();
+                                            this.refresh(cx);
+                                        }),
+                                    )),
+                            )
+                            .child(
+                                div()
                                     .id("caption-list")
+                                    .flex_1()
+                                    .min_h(px(64.))
+                                    .overflow_y_scroll()
                                     .flex()
                                     .flex_col()
                                     .gap_2()
@@ -1393,55 +1439,6 @@ impl Render for MemeApp {
                                         },
                                     )),
                             )
-                            .child(div().h(px(1.)).bg(rgb(0x383d46)))
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .font_weight(FontWeight::BOLD)
-                                    .text_color(rgb(0x959ba8))
-                                    .child("SELECTED LAYER"),
-                            )
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .justify_between()
-                                    .child("Size")
-                                    .child(
-                                        div()
-                                            .flex()
-                                            .items_center()
-                                            .gap_3()
-                                            .child(button(
-                                                "smaller",
-                                                "−",
-                                                false,
-                                                cx.listener(|this, _, _, cx| {
-                                                    this.resize_selection(-1.);
-                                                    this.refresh(cx);
-                                                }),
-                                            ))
-                                            .child(selection_size.unwrap_or_else(|| "—".into()))
-                                            .child(button(
-                                                "larger",
-                                                "+",
-                                                false,
-                                                cx.listener(|this, _, _, cx| {
-                                                    this.resize_selection(1.);
-                                                    this.refresh(cx);
-                                                }),
-                                            )),
-                                    ),
-                            )
-                            .child(button(
-                                "delete-selected",
-                                "Delete layer",
-                                false,
-                                cx.listener(|this, _, _, cx| {
-                                    this.delete_selection();
-                                    this.refresh(cx);
-                                }),
-                            ))
                             .child(
                                 div()
                                     .text_xs()
