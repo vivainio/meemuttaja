@@ -1,6 +1,6 @@
 # Meemuttaja
 
-A small Rust + GPUI Kit desktop meme maker. Open an image or browse and search popular blank templates from Imgflip, click either caption field and type, adjust the text size, and export the result as a PNG. Captions are rendered in uppercase with a black outline; the exported image keeps the source dimensions.
+A small Rust + GPUI Kit desktop meme maker. Open an image or browse and search popular blank templates from Imgflip, click either caption field and type, adjust the text size, drag captions in the preview, and export the result as a PNG. Captions are rendered in uppercase with a black outline; the exported image keeps the source dimensions.
 
 ## Run
 

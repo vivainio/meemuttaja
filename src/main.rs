@@ -5,6 +5,8 @@ use gpui_kit::{prelude::*, *};
 use image::{DynamicImage, Rgba};
 use imageproc::drawing::draw_text_mut;
 use serde::Deserialize;
+use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -84,6 +86,9 @@ struct MemeApp {
     _subscriptions: Vec<Subscription>,
     font_size: f32,
     status: String,
+    caption_offsets: [(f32, f32); 2],
+    drag: Option<(usize, Point<Pixels>, (f32, f32), f32, f32)>,
+    preview_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
 }
 
 fn preview_pixels(mut image: image::RgbaImage) -> image::RgbaImage {
@@ -109,11 +114,39 @@ fn font() -> Option<FontArc> {
     })
 }
 
+fn wrap_caption(text: &str, font: &FontArc, scale: PxScale, w: u32, margin: i32) -> Vec<String> {
+    let text = text.to_uppercase();
+    let mut lines = Vec::new();
+    let mut line = String::new();
+    for word in text.split_whitespace() {
+        let candidate = if line.is_empty() {
+            word.to_string()
+        } else {
+            format!("{line} {word}")
+        };
+        if imageproc::drawing::text_size(scale, &font, &candidate).0
+            > w.saturating_sub((margin * 2) as u32)
+            && !line.is_empty()
+        {
+            lines.push(std::mem::take(&mut line));
+        }
+        if !line.is_empty() {
+            line.push(' ');
+        }
+        line.push_str(word);
+    }
+    if !line.is_empty() {
+        lines.push(line);
+    }
+    lines
+}
+
 fn make_meme(
     source: &DynamicImage,
     top: &str,
     bottom: &str,
     size: f32,
+    offsets: [(f32, f32); 2],
 ) -> Result<DynamicImage, String> {
     let font = font().ok_or("Could not find a bold system font")?;
     let mut out = source.to_rgba8();
@@ -123,38 +156,17 @@ fn make_meme(
     let line_height = (scaled.height() * 1.1).ceil() as i32;
     let margin = (w as f32 * 0.025) as i32;
     let bottom_margin = ((h as f32 * 0.08) as i32).max(margin);
-    for (text, is_bottom) in [(top, false), (bottom, true)] {
-        let text = text.to_uppercase();
-        let mut lines = Vec::new();
-        let mut line = String::new();
-        for word in text.split_whitespace() {
-            let candidate = if line.is_empty() {
-                word.to_string()
-            } else {
-                format!("{line} {word}")
-            };
-            if imageproc::drawing::text_size(scale, &font, &candidate).0
-                > w.saturating_sub((margin * 2) as u32)
-                && !line.is_empty()
-            {
-                lines.push(std::mem::take(&mut line));
-            }
-            if !line.is_empty() {
-                line.push(' ');
-            }
-            line.push_str(word);
-        }
-        if !line.is_empty() {
-            lines.push(line);
-        }
+    for (index, (text, is_bottom)) in [(top, false), (bottom, true)].into_iter().enumerate() {
+        let lines = wrap_caption(text, &font, scale, w, margin);
         let start_y = if is_bottom {
             h as i32 - bottom_margin - line_height * lines.len() as i32
         } else {
             margin
         };
+        let start_y = start_y + (offsets[index].1 * h as f32).round() as i32;
         for (i, line) in lines.iter().enumerate() {
             let tw = imageproc::drawing::text_size(scale, &font, line).0 as i32;
-            let x = (w as i32 - tw) / 2;
+            let x = (w as i32 - tw) / 2 + (offsets[index].0 * w as f32).round() as i32;
             let y = start_y + i as i32 * line_height;
             let stroke = (scale.y / 18.0).round().max(1.0) as i32;
             for dy in -stroke..=stroke {
@@ -187,6 +199,69 @@ fn make_meme(
 }
 
 impl MemeApp {
+    fn image_rect(&self) -> Option<(f32, f32, f32, f32)> {
+        let bounds = self.preview_bounds.get()?;
+        let image = self.preview_base.as_ref()?;
+        let width: f32 = bounds.size.width.into();
+        let height: f32 = bounds.size.height.into();
+        let scale = (width / image.width() as f32).min(height / image.height() as f32);
+        let w = image.width() as f32 * scale;
+        let h = image.height() as f32 * scale;
+        Some((
+            f32::from(bounds.origin.x) + (width - w) / 2.,
+            f32::from(bounds.origin.y) + (height - h) / 2.,
+            w,
+            h,
+        ))
+    }
+    fn begin_drag(&mut self, event: &MouseDownEvent) {
+        let (x, y, w, h) = match self.image_rect() {
+            Some(rect) => rect,
+            None => return,
+        };
+        let px = f32::from(event.position.x) - x;
+        let py = f32::from(event.position.y) - y;
+        if px < 0. || px > w || py < 0. || py > h {
+            return;
+        }
+        let Some(image) = &self.preview_base else {
+            return;
+        };
+        let Some(font) = font() else { return };
+        let iw = image.width() as f32;
+        let ih = image.height() as f32;
+        let scale = PxScale::from((iw * self.font_size / 1000.).max(8.));
+        let line_height = (font.as_scaled(scale).height() * 1.1).ceil();
+        let margin = iw * 0.025;
+        // Measure the same wrapped lines that are drawn by make_meme.
+        for (index, text) in [&self.top, &self.bottom].into_iter().enumerate().rev() {
+            if text.trim().is_empty() {
+                continue;
+            }
+            let lines = wrap_caption(text, &font, scale, image.width(), margin as i32);
+            let block_height = line_height * lines.len() as f32;
+            let base_y = if index == 0 {
+                margin
+            } else {
+                ih - (ih * 0.08).max(margin) - block_height
+            };
+            let offset = self.caption_offsets[index];
+            let left = lines
+                .iter()
+                .map(|line| imageproc::drawing::text_size(scale, &font, line).0 as f32)
+                .fold(0., f32::max);
+            let image_x = px / w * iw;
+            let image_y = py / h * ih;
+            if image_x >= (iw - left) / 2. + offset.0 * iw - margin
+                && image_x <= (iw + left) / 2. + offset.0 * iw + margin
+                && image_y >= base_y + offset.1 * ih - margin
+                && image_y <= base_y + offset.1 * ih + block_height + margin
+            {
+                self.drag = Some((index, event.position, offset, w, h));
+                break;
+            }
+        }
+    }
     fn browse(&mut self, cx: &mut Context<Self>) {
         self.browsing = true;
         if !self.templates.is_empty() || self.loading {
@@ -264,16 +339,24 @@ impl MemeApp {
         let top = self.top.clone();
         let bottom = self.bottom.clone();
         let font_size = self.font_size;
+        let offsets = self.caption_offsets;
+        let rendered_base = image.clone();
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_spawn(async move {
-                    make_meme(&image, &top, &bottom, font_size)
+                    make_meme(&image, &top, &bottom, font_size, offsets)
                         .map(|result| preview_pixels(result.to_rgba8()))
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
                 this.preview_busy = false;
-                if generation == this.preview_generation {
+                // Show completed frames during continuous input, then render the latest state.
+                // Do not show a frame from an image that has since been replaced.
+                if this
+                    .preview_base
+                    .as_ref()
+                    .is_some_and(|current| Arc::ptr_eq(current, &rendered_base))
+                {
                     match result {
                         Ok(image) => {
                             this.preview =
@@ -282,7 +365,8 @@ impl MemeApp {
                         Err(err) => this.status = err,
                     }
                     cx.notify();
-                } else {
+                }
+                if generation != this.preview_generation {
                     this.render_preview(cx);
                 }
             });
@@ -326,8 +410,14 @@ impl MemeApp {
             .save_file()
         {
             path.set_extension("png");
-            self.status = match make_meme(source, &self.top, &self.bottom, self.font_size)
-                .and_then(|img| img.save(&path).map_err(|e| e.to_string()))
+            self.status = match make_meme(
+                source,
+                &self.top,
+                &self.bottom,
+                self.font_size,
+                self.caption_offsets,
+            )
+            .and_then(|img| img.save(&path).map_err(|e| e.to_string()))
             {
                 Ok(()) => format!("Saved to {}", path.display()),
                 Err(err) => format!("Could not save: {err}"),
@@ -451,15 +541,49 @@ impl Render for MemeApp {
                 )
                 .into_any_element()
         } else if let Some(image) = &self.preview {
+            let bounds = self.preview_bounds.clone();
             div()
+                .id("draggable-preview")
+                .relative()
                 .size_full()
                 .flex()
                 .items_center()
                 .justify_center()
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, event: &MouseDownEvent, _, _| this.begin_drag(event)),
+                )
+                .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
+                    if let Some((index, start, offset, w, h)) = this.drag {
+                        this.caption_offsets[index] = (
+                            (offset.0 + f32::from(event.position.x - start.x) / w).clamp(-1., 1.),
+                            (offset.1 + f32::from(event.position.y - start.y) / h).clamp(-1., 1.),
+                        );
+                        this.refresh(cx);
+                    }
+                }))
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(|this, _, _, _| this.drag = None),
+                )
+                .on_mouse_up_out(
+                    MouseButton::Left,
+                    cx.listener(|this, _, _, _| this.drag = None),
+                )
+                .child(
+                    canvas(
+                        move |rect, _, _| {
+                            bounds.set(Some(rect));
+                        },
+                        |_, _, _, _| {},
+                    )
+                    .absolute()
+                    .inset_0()
+                    .size_full(),
+                )
                 .child(
                     img(image.clone())
-                        .max_w_full()
-                        .max_h_full()
+                        .size_full()
                         .object_fit(ObjectFit::Contain),
                 )
                 .into_any_element()
@@ -535,6 +659,15 @@ impl Render for MemeApp {
                             .child(div().h(px(1.)).bg(rgb(0x383d46)))
                             .child(field("TOP TEXT", &self.top_input))
                             .child(field("BOTTOM TEXT", &self.bottom_input))
+                            .child(button(
+                                "reset-positions",
+                                "Reset text positions",
+                                false,
+                                cx.listener(|this, _, _, cx| {
+                                    this.caption_offsets = [(0., 0.); 2];
+                                    this.refresh(cx);
+                                }),
+                            ))
                             .child(
                                 div()
                                     .flex()
@@ -690,6 +823,9 @@ fn main() {
                             _subscriptions: subscriptions,
                             font_size: 65.,
                             status: "PNG, JPG, WebP, GIF or BMP".into(),
+                            caption_offsets: [(0., 0.); 2],
+                            drag: None,
+                            preview_bounds: Rc::new(Cell::new(None)),
                         }
                     })
                 },
