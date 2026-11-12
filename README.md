@@ -14,6 +14,6 @@ Supported source formats are PNG, JPEG, WebP, GIF (first frame), and BMP. The ap
 
 The template browser requires an internet connection and loads its catalog and images from [Imgflip](https://imgflip.com/api).
 
-## CI builds
+## Releases
 
-GitHub Actions builds release binaries for Windows x64 and Apple Silicon macOS on pushes to `main`, pull requests, and manual runs. Download the binaries from the workflow run's artifacts. These are unsigned standalone executables, not installers or macOS app bundles.
+Publishing a GitHub release triggers builds for Windows x64 and Apple Silicon macOS. The binaries are attached to that release. The macOS executable is distributed in a tarball to preserve its executable permission. They are unsigned standalone executables, not installers or macOS app bundles.
