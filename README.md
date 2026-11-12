@@ -1,6 +1,6 @@
 # Meemuttaja
 
-A small Rust + GPUI Kit desktop meme maker. Open an image or browse and search popular blank templates from Imgflip, click either caption field and type, adjust the text size, drag captions in the preview, and export the result as a PNG. Captions are rendered in uppercase with a black outline; the exported image keeps the source dimensions.
+A Rust + GPUI Kit desktop meme maker. Open an image or browse blank templates from Imgflip, add and drag text blocks, and import images or search Wikimedia Commons for stickers. Select a block or sticker to resize or delete it, then export the result as a PNG or copy it to the clipboard. Captions are uppercase with a black outline; exports keep the source dimensions.
 
 ## Run
 
@@ -17,3 +17,5 @@ The template browser requires an internet connection and loads its catalog and i
 ## Releases
 
 Publishing a GitHub release triggers builds for Windows x64 and Apple Silicon macOS. The binaries are attached to that release. The macOS executable is distributed in a tarball to preserve its executable permission. They are unsigned standalone executables, not installers or macOS app bundles.
+
+Online sticker search uses Wikimedia Commons. Images are added at thumbnail resolution and may have opaque backgrounds. Use each result’s source link to check its license and attribution requirements.
