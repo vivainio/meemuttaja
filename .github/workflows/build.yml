@@ -3,6 +3,12 @@ name: Build desktop releases
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing draft release tag to build
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -18,7 +24,7 @@ jobs:
           - name: macOS Apple Silicon
             runner: macos-latest
             binary: target/release/meemuttaja
-            asset: meemuttaja-macos-arm64.tar.gz
+            asset: meemuttaja-macos-arm64.zip
             package: tar
           - name: Windows x64
             runner: windows-latest
@@ -26,7 +32,18 @@ jobs:
             asset: meemuttaja-windows-x64.exe
             package: copy
     steps:
+      - name: Verify draft release
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
@@ -36,11 +53,11 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
           if [ '${{ matrix.package }}' = tar ]; then
             scripts/package-macos.sh
-            tar -czf '${{ matrix.asset }}' -C dist Meemuttaja.app
+            ditto -c -k --keepParent dist/Meemuttaja.app "${{ matrix.asset }}"
           else
             cp '${{ matrix.binary }}' '${{ matrix.asset }}'
           fi
