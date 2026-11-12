@@ -16,6 +16,6 @@ The template browser requires an internet connection and loads its catalog and i
 
 ## Releases
 
-Publishing a GitHub release triggers builds for Windows x64 and Apple Silicon macOS. The binaries are attached to that release. The macOS executable is distributed in a tarball to preserve its executable permission. They are unsigned standalone executables, not installers or macOS app bundles.
+Publishing a GitHub release triggers builds for Windows x64 and Apple Silicon macOS. The binaries are attached to that release. The macOS tarball contains an unsigned app bundle, and the Windows asset is an unsigned standalone executable. To build a macOS app bundle locally, run `cargo build --release` followed by `scripts/package-macos.sh`.
 
 Online sticker search uses Wikimedia Commons. Images are added at thumbnail resolution and may have opaque backgrounds. Use each result’s source link to check its license and attribution requirements.

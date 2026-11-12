@@ -10,3 +10,6 @@ imageproc = { version = "0.25", default-features = false }
 ab_glyph = "0.2"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
+
+[build-dependencies]
+embed-resource = "3"

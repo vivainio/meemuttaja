@@ -39,7 +39,8 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           if [ '${{ matrix.package }}' = tar ]; then
-            tar -czf '${{ matrix.asset }}' -C target/release meemuttaja
+            scripts/package-macos.sh
+            tar -czf '${{ matrix.asset }}' -C dist Meemuttaja.app
           else
             cp '${{ matrix.binary }}' '${{ matrix.asset }}'
           fi

@@ -1496,6 +1496,9 @@ fn main() {
             gpui_kit::open_window(
                 WindowOptions {
                     window_bounds: Some(WindowBounds::Windowed(bounds)),
+                    icon: image::load_from_memory(include_bytes!("../assets/icon.png"))
+                        .ok()
+                        .map(|icon| Arc::new(icon.thumbnail(256, 256).to_rgba8())),
                     ..Default::default()
                 },
                 cx,
