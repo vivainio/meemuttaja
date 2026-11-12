@@ -86,6 +86,14 @@ struct MemeApp {
     status: String,
 }
 
+fn preview_pixels(mut image: image::RgbaImage) -> image::RgbaImage {
+    // GPUI RenderImage expects BGRA bytes; image processing and export use RGBA.
+    for pixel in image.pixels_mut() {
+        pixel.0.swap(0, 2);
+    }
+    image
+}
+
 fn font() -> Option<FontArc> {
     [
         "/System/Library/Fonts/Supplemental/Impact.ttf",
@@ -259,7 +267,8 @@ impl MemeApp {
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_spawn(async move {
-                    make_meme(&image, &top, &bottom, font_size).map(|result| result.to_rgba8())
+                    make_meme(&image, &top, &bottom, font_size)
+                        .map(|result| preview_pixels(result.to_rgba8()))
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
@@ -404,7 +413,7 @@ impl Render for MemeApp {
                             div()
                                 .text_lg()
                                 .font_weight(FontWeight::BOLD)
-                                .child("Explore templates"),
+                                .child("Templates"),
                         )
                         .child(button(
                             "close-catalog",
@@ -460,18 +469,11 @@ impl Render for MemeApp {
                 .flex_col()
                 .items_center()
                 .gap_3()
-                .child(div().text_size(px(36.)).child("✳"))
-                .child(
-                    div()
-                        .text_lg()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child("Your next great meme starts here"),
-                )
                 .child(
                     div()
                         .text_sm()
                         .text_color(rgb(0x858c99))
-                        .child("Choose an image to get started"),
+                        .child("No image selected"),
                 )
                 .child(button(
                     "empty-open",
@@ -495,39 +497,10 @@ impl Render for MemeApp {
                     .flex()
                     .items_center()
                     .justify_between()
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_3()
-                            .child(
-                                div()
-                                    .size(px(36.))
-                                    .rounded_lg()
-                                    .bg(rgb(0xc9f36b))
-                                    .text_color(rgb(0x17210a))
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .font_weight(FontWeight::BOLD)
-                                    .child("M"),
-                            )
-                            .child(
-                                div()
-                                    .flex()
-                                    .flex_col()
-                                    .child(div().font_weight(FontWeight::BOLD).child("meemuttaja"))
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(rgb(0x959ba8))
-                                            .child("THE MEME STUDIO"),
-                                    ),
-                            ),
-                    )
+                    .child(div().font_weight(FontWeight::BOLD).child("Meemuttaja"))
                     .child(button(
                         "export",
-                        "Export PNG  ↗",
+                        "Export PNG",
                         true,
                         cx.listener(|this, _, _, cx| this.save(cx)),
                     )),
@@ -547,31 +520,15 @@ impl Render for MemeApp {
                             .flex()
                             .flex_col()
                             .gap_5()
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(0xc9f36b))
-                                    .font_weight(FontWeight::BOLD)
-                                    .child("01  /  CREATE"),
-                            )
-                            .child(
-                                div()
-                                    .text_2xl()
-                                    .font_weight(FontWeight::BOLD)
-                                    .child("Make it yours."),
-                            )
-                            .child(div().text_sm().text_color(rgb(0x959ba8)).child(
-                                "Pick an image, add your words, and let the internet do its thing.",
-                            ))
                             .child(button(
                                 "open",
-                                "↑  Choose image",
+                                "Choose image",
                                 false,
                                 cx.listener(|this, _, _, cx| this.open(cx)),
                             ))
                             .child(button(
                                 "browse",
-                                "✦  Browse templates",
+                                "Browse templates",
                                 false,
                                 cx.listener(|this, _, _, cx| this.browse(cx)),
                             ))
@@ -639,8 +596,7 @@ impl Render for MemeApp {
                                     .text_xs()
                                     .font_weight(FontWeight::BOLD)
                                     .text_color(rgb(0x858c99))
-                                    .child("PREVIEW")
-                                    .child("READY WHEN YOU ARE ✦"),
+                                    .child("PREVIEW"),
                             )
                             .child(
                                 div()
@@ -741,4 +697,16 @@ fn main() {
             .expect("open window");
             cx.activate(true);
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::preview_pixels;
+    use image::Rgba;
+
+    #[test]
+    fn preview_converts_rgba_to_bgra() {
+        let image = image::RgbaImage::from_pixel(1, 1, Rgba([240, 120, 30, 200]));
+        assert_eq!(preview_pixels(image).get_pixel(0, 0).0, [30, 120, 240, 200]);
+    }
 }
