@@ -105,7 +105,20 @@ for k in range(4):
     arc = ellipse_pts(cx, cy, vr, vr, n=16, a0=a0, a1=a0 + math.pi / 2)
     stroke(arc, 15)
 
-out = img.resize((SIZE, SIZE), Image.LANCZOS)
+face = img.resize((SIZE, SIZE), Image.LANCZOS)
+
+# Rounded-square tile following the macOS icon template (824px inside 1024px).
+TILE, RADIUS, FACE = 824, 185, 660
+TILE_COLOR = (255, 214, 64, 255)
+m = SIZE * SS
+tile_big = Image.new("RGBA", (m, m), (0, 0, 0, 0))
+off = (SIZE - TILE) // 2 * SS
+ImageDraw.Draw(tile_big).rounded_rectangle(
+    [off, off, off + TILE * SS, off + TILE * SS], radius=RADIUS * SS, fill=TILE_COLOR
+)
+out = tile_big.resize((SIZE, SIZE), Image.LANCZOS)
+small = face.resize((FACE, FACE), Image.LANCZOS)
+out.alpha_composite(small, ((SIZE - FACE) // 2, (SIZE - FACE) // 2))
 dest = Path(__file__).resolve().parent.parent / "assets" / "icon.png"
 out.save(dest)
 print(f"wrote {dest}")
