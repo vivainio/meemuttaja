@@ -16,6 +16,36 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
+const NUDGE: f32 = 0.01;
+const NUDGE_FAR: f32 = 0.05;
+
+actions!(
+    meemuttaja,
+    [
+        OpenImage,
+        ExportPng,
+        CopyImage,
+        NewText,
+        NextLayer,
+        PreviousLayer,
+        DeleteLayer,
+        LargerLayer,
+        SmallerLayer,
+        Deselect,
+        NudgeLeft,
+        NudgeRight,
+        NudgeUp,
+        NudgeDown,
+        NudgeLeftFar,
+        NudgeRightFar,
+        NudgeUpFar,
+        NudgeDownFar,
+        Quit,
+        CloseWindow,
+        Minimize,
+    ]
+);
+
 #[derive(Clone, Deserialize)]
 struct Template {
     name: String,
@@ -197,6 +227,7 @@ struct MemeApp {
     status: String,
     drag: Option<(Selection, Point<Pixels>, (f32, f32), f32, f32)>,
     preview_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
+    preview_focus: FocusHandle,
 }
 
 fn preview_pixels(mut image: image::RgbaImage) -> image::RgbaImage {
@@ -650,6 +681,53 @@ impl MemeApp {
             Some(Selection::Sticker(index)) => {
                 if let Some(s) = self.stickers.get_mut(index) {
                     s.size = (s.size + direction * 0.05).clamp(0.05, 2.);
+                }
+            }
+            None => {}
+        }
+    }
+    fn nudge(&mut self, dx: f32, dy: f32, cx: &mut Context<Self>) {
+        self.nudge_selection(dx, dy);
+        self.refresh(cx);
+        cx.notify();
+    }
+    fn cycle_layer(&mut self, step: isize) {
+        let mut layers: Vec<Selection> = self
+            .captions
+            .iter()
+            .map(|c| Selection::Caption(c.id))
+            .collect();
+        layers.extend((0..self.stickers.len()).map(Selection::Sticker));
+        if layers.is_empty() {
+            return;
+        }
+        let current = self
+            .selected
+            .and_then(|s| layers.iter().position(|l| *l == s));
+        let len = layers.len() as isize;
+        let next = match current {
+            Some(i) => (i as isize + step).rem_euclid(len),
+            None if step > 0 => 0,
+            None => len - 1,
+        };
+        self.selected = Some(layers[next as usize]);
+    }
+    fn nudge_selection(&mut self, dx: f32, dy: f32) {
+        match self.selected {
+            Some(Selection::Caption(id)) => {
+                if let Some(c) = self.captions.iter_mut().find(|c| c.id == id) {
+                    c.data.offset = (
+                        (c.data.offset.0 + dx).clamp(-1., 1.),
+                        (c.data.offset.1 + dy).clamp(-1., 1.),
+                    );
+                }
+            }
+            Some(Selection::Sticker(index)) => {
+                if let Some(s) = self.stickers.get_mut(index) {
+                    s.position = (
+                        (s.position.0 + dx).clamp(-1., 1.),
+                        (s.position.1 + dy).clamp(-1., 1.),
+                    );
                 }
             }
             None => {}
@@ -1128,6 +1206,8 @@ impl Render for MemeApp {
             let bounds = self.preview_bounds.clone();
             div()
                 .id("draggable-preview")
+                .key_context("Preview")
+                .track_focus(&self.preview_focus)
                 .relative()
                 .size_full()
                 .flex()
@@ -1135,7 +1215,8 @@ impl Render for MemeApp {
                 .justify_center()
                 .on_mouse_down(
                     MouseButton::Left,
-                    cx.listener(|this, event: &MouseDownEvent, _, cx| {
+                    cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                        window.focus(&this.preview_focus, cx);
                         this.begin_drag(event);
                         cx.notify();
                     }),
@@ -1209,6 +1290,54 @@ impl Render for MemeApp {
         };
         div()
             .size_full()
+            .key_context("MemeApp")
+            .on_action(cx.listener(|this, _: &OpenImage, _, cx| this.open(cx)))
+            .on_action(cx.listener(|this, _: &ExportPng, _, cx| this.save(cx)))
+            .on_action(cx.listener(|this, _: &CopyImage, _, cx| this.copy_image(cx)))
+            .on_action(cx.listener(|this, _: &NewText, window, cx| {
+                this.add_caption(Anchor::Center, window, cx);
+                this.selected = this.captions.last().map(|c| Selection::Caption(c.id));
+                this.refresh(cx);
+            }))
+            .on_action(cx.listener(|this, _: &NextLayer, _, cx| {
+                this.cycle_layer(1);
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &PreviousLayer, _, cx| {
+                this.cycle_layer(-1);
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &DeleteLayer, _, cx| {
+                this.delete_selection();
+                this.refresh(cx);
+            }))
+            .on_action(cx.listener(|this, _: &LargerLayer, _, cx| {
+                this.resize_selection(1.);
+                this.refresh(cx);
+            }))
+            .on_action(cx.listener(|this, _: &SmallerLayer, _, cx| {
+                this.resize_selection(-1.);
+                this.refresh(cx);
+            }))
+            .on_action(cx.listener(|this, _: &Deselect, _, cx| {
+                if this.browsing || this.browsing_stickers {
+                    this.browsing = false;
+                    this.browsing_stickers = false;
+                } else {
+                    this.selected = None;
+                }
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &NudgeLeft, _, cx| this.nudge(-NUDGE, 0., cx)))
+            .on_action(cx.listener(|this, _: &NudgeRight, _, cx| this.nudge(NUDGE, 0., cx)))
+            .on_action(cx.listener(|this, _: &NudgeUp, _, cx| this.nudge(0., -NUDGE, cx)))
+            .on_action(cx.listener(|this, _: &NudgeDown, _, cx| this.nudge(0., NUDGE, cx)))
+            .on_action(cx.listener(|this, _: &NudgeLeftFar, _, cx| this.nudge(-NUDGE_FAR, 0., cx)))
+            .on_action(cx.listener(|this, _: &NudgeRightFar, _, cx| this.nudge(NUDGE_FAR, 0., cx)))
+            .on_action(cx.listener(|this, _: &NudgeUpFar, _, cx| this.nudge(0., -NUDGE_FAR, cx)))
+            .on_action(cx.listener(|this, _: &NudgeDownFar, _, cx| this.nudge(0., NUDGE_FAR, cx)))
+            .on_action(cx.listener(|_, _: &CloseWindow, window, _| window.remove_window()))
+            .on_action(cx.listener(|_, _: &Minimize, window, _| window.minimize_window()))
             .flex()
             .flex_col()
             .bg(rgb(0x171a20))
@@ -1489,6 +1618,92 @@ fn main() {
         .run(|cx: &mut App| {
             gpui_kit::init(cx);
             Theme::change(ThemeMode::Dark, None, cx);
+            cx.on_action(|_: &Quit, cx| cx.quit());
+            cx.bind_keys([
+                KeyBinding::new("secondary-o", OpenImage, None),
+                KeyBinding::new("secondary-s", ExportPng, None),
+                KeyBinding::new("secondary-shift-c", CopyImage, None),
+                KeyBinding::new("secondary-t", NewText, None),
+                KeyBinding::new("secondary-]", NextLayer, None),
+                KeyBinding::new("secondary-[", PreviousLayer, None),
+                KeyBinding::new("secondary-=", LargerLayer, None),
+                KeyBinding::new("secondary-+", LargerLayer, None),
+                KeyBinding::new("secondary--", SmallerLayer, None),
+                KeyBinding::new("secondary-q", Quit, None),
+                KeyBinding::new("secondary-w", CloseWindow, None),
+                #[cfg(target_os = "macos")]
+                KeyBinding::new("cmd-m", Minimize, None),
+                KeyBinding::new("escape", Deselect, Some("MemeApp")),
+                KeyBinding::new("backspace", DeleteLayer, Some("Preview")),
+                KeyBinding::new("delete", DeleteLayer, Some("Preview")),
+                KeyBinding::new("left", NudgeLeft, Some("Preview")),
+                KeyBinding::new("right", NudgeRight, Some("Preview")),
+                KeyBinding::new("up", NudgeUp, Some("Preview")),
+                KeyBinding::new("down", NudgeDown, Some("Preview")),
+                KeyBinding::new("shift-left", NudgeLeftFar, Some("Preview")),
+                KeyBinding::new("shift-right", NudgeRightFar, Some("Preview")),
+                KeyBinding::new("shift-up", NudgeUpFar, Some("Preview")),
+                KeyBinding::new("shift-down", NudgeDownFar, Some("Preview")),
+            ]);
+            cx.set_menus(vec![
+                Menu {
+                    name: "Meemuttaja".into(),
+                    disabled: false,
+                    items: vec![
+                        MenuItem::os_submenu("Services", SystemMenuType::Services),
+                        MenuItem::separator(),
+                        MenuItem::action("Quit Meemuttaja", Quit),
+                    ],
+                },
+                Menu {
+                    name: "File".into(),
+                    disabled: false,
+                    items: vec![
+                        MenuItem::action("Open Image…", OpenImage),
+                        MenuItem::separator(),
+                        MenuItem::action("Export PNG…", ExportPng),
+                        MenuItem::action("Copy Image", CopyImage),
+                        MenuItem::separator(),
+                        MenuItem::action("Close Window", CloseWindow),
+                    ],
+                },
+                Menu {
+                    name: "Edit".into(),
+                    disabled: false,
+                    items: vec![
+                        MenuItem::os_action("Undo", gpui_kit::base::input::Undo, OsAction::Undo),
+                        MenuItem::os_action("Redo", gpui_kit::base::input::Redo, OsAction::Redo),
+                        MenuItem::separator(),
+                        MenuItem::os_action("Cut", gpui_kit::base::input::Cut, OsAction::Cut),
+                        MenuItem::os_action("Copy", gpui_kit::base::input::Copy, OsAction::Copy),
+                        MenuItem::os_action("Paste", gpui_kit::base::input::Paste, OsAction::Paste),
+                        MenuItem::os_action(
+                            "Select All",
+                            gpui_kit::base::input::SelectAll,
+                            OsAction::SelectAll,
+                        ),
+                    ],
+                },
+                Menu {
+                    name: "Layer".into(),
+                    disabled: false,
+                    items: vec![
+                        MenuItem::action("New Text", NewText),
+                        MenuItem::separator(),
+                        MenuItem::action("Next Layer", NextLayer),
+                        MenuItem::action("Previous Layer", PreviousLayer),
+                        MenuItem::separator(),
+                        MenuItem::action("Larger", LargerLayer),
+                        MenuItem::action("Smaller", SmallerLayer),
+                        MenuItem::action("Delete Layer", DeleteLayer),
+                    ],
+                },
+                Menu {
+                    name: "Window".into(),
+                    disabled: false,
+                    items: vec![MenuItem::action("Minimize", Minimize)],
+                },
+            ]);
             let bounds = Bounds::centered(None, size(px(1100.), px(760.)), cx);
             gpui_kit::open_window(
                 WindowOptions {
@@ -1515,6 +1730,8 @@ fn main() {
                                     this.sticker_query =
                                         sticker_search.read(cx).value().to_string();
                                     cx.notify();
+                                } else if matches!(event, InputEvent::PressEnter { .. }) {
+                                    this.search_stickers(cx);
                                 }
                             },
                         ));
@@ -1555,6 +1772,7 @@ fn main() {
                             status: "PNG, JPG, WebP, GIF or BMP".into(),
                             drag: None,
                             preview_bounds: Rc::new(Cell::new(None)),
+                            preview_focus: cx.focus_handle(),
                         };
                         app.add_caption(Anchor::Top, window, cx);
                         app.add_caption(Anchor::Bottom, window, cx);
