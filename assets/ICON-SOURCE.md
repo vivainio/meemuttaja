@@ -1,3 +1,5 @@
 # Icon source
 
-The icon uses the Me Gusta rage-comic face, created by May Oswald. The PNG used here was downloaded from [TOPpng](https://toppng.com/show_download/94666/me-gusta-meme-render), which describes the image as available for personal use. Permission for broader redistribution has not been verified.
+The icon is an original rage-comic style smiling face, drawn procedurally by [`scripts/make-icon.py`](../scripts/make-icon.py). It contains no third-party artwork and is dedicated to the public domain under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
+
+To regenerate it, run `scripts/make-icon.py` with Pillow installed, then rebuild `icon.ico` and `icon.icns` from `icon.png`.

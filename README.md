@@ -52,4 +52,4 @@ Publishing a GitHub release builds the macOS and Windows assets. To test a draft
 
 ## License
 
-The application code is licensed under the [MIT License](LICENSE). The Me Gusta icon is a third-party image; see its [source and rights note](assets/ICON-SOURCE.md).
+The application code is licensed under the [MIT License](LICENSE). The app icon is an original drawing released under CC0; see its [source note](assets/ICON-SOURCE.md).
