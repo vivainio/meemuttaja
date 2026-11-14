@@ -10,7 +10,7 @@ Meemuttaja is for making memes without the watermarks and noisy interfaces found
 
 Download a build from [GitHub Releases](https://github.com/vivainio/meemuttaja/releases):
 
-- **macOS (Apple Silicon):** Extract `meemuttaja-macos-arm64.zip` and move `Meemuttaja.app` to Applications.
+- **macOS (Apple Silicon):** Extract `meemuttaja-macos-arm64.zip` and move `Meemuttaja.app` to Applications. The app is ad-hoc signed but not notarized, so on first launch right-click it and choose Open. If macOS says it is "damaged", run `xattr -cr /Applications/Meemuttaja.app`.
 - **Windows (x64):** Download and run `meemuttaja-windows-x64.exe`.
 
 The builds are unsigned. Your operating system may ask you to confirm that you want to open them. Draft releases are visible only to repository collaborators with access.
