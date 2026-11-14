@@ -16,6 +16,19 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
+// Primary shortcut modifier: Cmd on macOS, Ctrl elsewhere.
+#[cfg(target_os = "macos")]
+macro_rules! modkey {
+    ($key:literal) => {
+        concat!("cmd-", $key)
+    };
+}
+#[cfg(not(target_os = "macos"))]
+macro_rules! modkey {
+    ($key:literal) => {
+        concat!("ctrl-", $key)
+    };
+}
 const NUDGE: f32 = 0.01;
 const NUDGE_FAR: f32 = 0.05;
 
@@ -228,6 +241,7 @@ struct MemeApp {
     drag: Option<(Selection, Point<Pixels>, (f32, f32), f32, f32)>,
     preview_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
     preview_focus: FocusHandle,
+    root_focus: FocusHandle,
 }
 
 fn preview_pixels(mut image: image::RgbaImage) -> image::RgbaImage {
@@ -1291,6 +1305,7 @@ impl Render for MemeApp {
         div()
             .size_full()
             .key_context("MemeApp")
+            .track_focus(&self.root_focus)
             .on_action(cx.listener(|this, _: &OpenImage, _, cx| this.open(cx)))
             .on_action(cx.listener(|this, _: &ExportPng, _, cx| this.save(cx)))
             .on_action(cx.listener(|this, _: &CopyImage, _, cx| this.copy_image(cx)))
@@ -1620,17 +1635,17 @@ fn main() {
             Theme::change(ThemeMode::Dark, None, cx);
             cx.on_action(|_: &Quit, cx| cx.quit());
             cx.bind_keys([
-                KeyBinding::new("secondary-o", OpenImage, None),
-                KeyBinding::new("secondary-s", ExportPng, None),
-                KeyBinding::new("secondary-shift-c", CopyImage, None),
-                KeyBinding::new("secondary-t", NewText, None),
-                KeyBinding::new("secondary-]", NextLayer, None),
-                KeyBinding::new("secondary-[", PreviousLayer, None),
-                KeyBinding::new("secondary-=", LargerLayer, None),
-                KeyBinding::new("secondary-+", LargerLayer, None),
-                KeyBinding::new("secondary--", SmallerLayer, None),
-                KeyBinding::new("secondary-q", Quit, None),
-                KeyBinding::new("secondary-w", CloseWindow, None),
+                KeyBinding::new(modkey!("o"), OpenImage, None),
+                KeyBinding::new(modkey!("s"), ExportPng, None),
+                KeyBinding::new(modkey!("shift-c"), CopyImage, None),
+                KeyBinding::new(modkey!("t"), NewText, None),
+                KeyBinding::new(modkey!("]"), NextLayer, None),
+                KeyBinding::new(modkey!("["), PreviousLayer, None),
+                KeyBinding::new(modkey!("="), LargerLayer, None),
+                KeyBinding::new(modkey!("+"), LargerLayer, None),
+                KeyBinding::new(modkey!("-"), SmallerLayer, None),
+                KeyBinding::new(modkey!("q"), Quit, None),
+                KeyBinding::new(modkey!("w"), CloseWindow, None),
                 #[cfg(target_os = "macos")]
                 KeyBinding::new("cmd-m", Minimize, None),
                 KeyBinding::new("escape", Deselect, Some("MemeApp")),
@@ -1773,10 +1788,13 @@ fn main() {
                             drag: None,
                             preview_bounds: Rc::new(Cell::new(None)),
                             preview_focus: cx.focus_handle(),
+                            root_focus: cx.focus_handle(),
                         };
                         app.add_caption(Anchor::Top, window, cx);
                         app.add_caption(Anchor::Bottom, window, cx);
                         app.selected = Some(Selection::Caption(0));
+                        // Keep focus inside the view so menu items stay enabled.
+                        window.focus(&app.root_focus, cx);
                         app
                     })
                 },
