@@ -17,7 +17,7 @@ Download a build from [GitHub Releases](https://github.com/vivainio/meemuttaja/r
   ```
 - **Windows (x64):** Download and run `meemuttaja-windows-x64.exe`.
 
-The builds are unsigned. Your operating system may ask you to confirm that you want to open them. Draft releases are visible only to repository collaborators with access.
+The builds are unsigned. Your operating system may ask you to confirm that you want to open them.
 
 ## Make a meme
 
